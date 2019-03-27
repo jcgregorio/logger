@@ -48,8 +48,8 @@ var severityName = []string{
 	fatalLog:   "FATAL",
 }
 
-func New() Logger {
-	return Logger{w: os.Stdout}
+func New() *Logger {
+	return &Logger{w: os.Stdout}
 }
 
 // Logger collects all the global state of the logging setup.
