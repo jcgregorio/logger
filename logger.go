@@ -48,8 +48,12 @@ var severityName = []string{
 	fatalLog:   "FATAL",
 }
 
-// LoggerT collects all the global state of the logging setup.
-type LoggerT struct {
+func New() Logger {
+	return Logger{w: os.Stdout}
+}
+
+// Logger collects all the global state of the logging setup.
+type Logger struct {
 	w SyncWriter
 
 	// freeList is a list of byte buffers, maintained under freeListMu.
@@ -67,12 +71,8 @@ type buffer struct {
 	next *buffer
 }
 
-var (
-	Logger = LoggerT{w: os.Stdout}
-)
-
 // getBuffer returns a new, ready-to-use buffer.
-func (l *LoggerT) getBuffer() *buffer {
+func (l *Logger) getBuffer() *buffer {
 	l.freeListMu.Lock()
 	b := l.freeList
 	if b != nil {
@@ -89,7 +89,7 @@ func (l *LoggerT) getBuffer() *buffer {
 }
 
 // putBuffer returns a buffer to the free list.
-func (l *LoggerT) putBuffer(b *buffer) {
+func (l *Logger) putBuffer(b *buffer) {
 	if b.Len() >= 256 {
 		// Let big buffers die a natural death.
 		return
@@ -119,7 +119,7 @@ where the fields are defined as follows:
 	line             The line number
 	msg              The user-supplied message
 */
-func (l *LoggerT) header(s severity, depth int) (*buffer, string, int) {
+func (l *Logger) header(s severity, depth int) (*buffer, string, int) {
 	_, file, line, ok := runtime.Caller(3 + depth)
 	if !ok {
 		file = "???"
@@ -134,7 +134,7 @@ func (l *LoggerT) header(s severity, depth int) (*buffer, string, int) {
 }
 
 // formatHeader formats a log header using the provided file name and line number.
-func (l *LoggerT) formatHeader(s severity, file string, line int) *buffer {
+func (l *Logger) formatHeader(s severity, file string, line int) *buffer {
 	now := timeNow()
 	if line < 0 {
 		line = 0 // not a real line number, but acceptable to someDigits
@@ -214,11 +214,11 @@ func (buf *buffer) someDigits(i, d int) int {
 	return copy(buf.tmp[i:], buf.tmp[j:])
 }
 
-func (l *LoggerT) print(s severity, args ...interface{}) {
+func (l *Logger) print(s severity, args ...interface{}) {
 	l.printDepth(s, 1, args...)
 }
 
-func (l *LoggerT) printDepth(s severity, depth int, args ...interface{}) {
+func (l *Logger) printDepth(s severity, depth int, args ...interface{}) {
 	buf, file, line := l.header(s, depth)
 	fmt.Fprint(buf, args...)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
@@ -227,7 +227,7 @@ func (l *LoggerT) printDepth(s severity, depth int, args ...interface{}) {
 	l.output(s, buf, file, line)
 }
 
-func (l *LoggerT) printf(s severity, format string, args ...interface{}) {
+func (l *Logger) printf(s severity, format string, args ...interface{}) {
 	buf, file, line := l.header(s, 0)
 	fmt.Fprintf(buf, format, args...)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
@@ -237,7 +237,7 @@ func (l *LoggerT) printf(s severity, format string, args ...interface{}) {
 }
 
 // output writes the data to the log files and releases the buffer.
-func (l *LoggerT) output(s severity, buf *buffer, file string, line int) {
+func (l *Logger) output(s severity, buf *buffer, file string, line int) {
 	data := buf.Bytes()
 	l.w.Write(data)
 	if s == fatalLog {
@@ -268,43 +268,49 @@ func stacks(all bool) []byte {
 	return trace
 }
 
-func (l *LoggerT) Info(args ...interface{}) {
+func (l *Logger) Info(args ...interface{}) {
 	l.print(infoLog, args...)
 }
 
-func (l *LoggerT) Infof(format string, args ...interface{}) {
+func (l *Logger) Infof(format string, args ...interface{}) {
 	l.printf(infoLog, format, args...)
 }
 
-func (l *LoggerT) Warning(args ...interface{}) {
+func (l *Logger) Warning(args ...interface{}) {
 	l.print(warningLog, args...)
 }
 
-func (l *LoggerT) Warningf(format string, args ...interface{}) {
+func (l *Logger) Warningf(format string, args ...interface{}) {
 	l.printf(warningLog, format, args...)
 }
 
-func (l *LoggerT) Error(args ...interface{}) {
+func (l *Logger) Error(args ...interface{}) {
 	l.print(errorLog, args...)
 }
 
-func (l *LoggerT) Errorf(format string, args ...interface{}) {
+func (l *Logger) Errorf(format string, args ...interface{}) {
 	l.printf(errorLog, format, args...)
 }
 
-func (l *LoggerT) Fatal(args ...interface{}) {
+func (l *Logger) Fatal(args ...interface{}) {
 	l.print(fatalLog, args...)
 }
 
-func (l *LoggerT) Fatalf(format string, args ...interface{}) {
+func (l *Logger) Fatalf(format string, args ...interface{}) {
 	l.printf(fatalLog, format, args...)
 }
 
-func (l *LoggerT) Raw(s string) {
+func (l *Logger) Raw(s string) {
 	l.w.Write([]byte(s))
 	if s[len(s)-1] != '\n' {
 		l.w.Write([]byte{'\n'})
 	}
 }
 
-var _ slog.Logger = (*LoggerT)(nil)
+// SetOutput changes where the logs are written to. By default
+// the value is os.Stdout.
+func (l *Logger) SetOutput(w SyncWriter) {
+	l.w = w
+}
+
+var _ slog.Logger = (*Logger)(nil)

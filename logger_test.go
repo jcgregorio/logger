@@ -24,6 +24,8 @@ import (
 	"time"
 )
 
+var test_logger = New()
+
 // flushBuffer wraps a bytes.Buffer to satisfy SyncWriter.
 type flushBuffer struct {
 	bytes.Buffer
@@ -35,18 +37,18 @@ func (f *flushBuffer) Sync() error {
 
 // contents returns the specified log value as a string.
 func contents() string {
-	return Logger.w.(*flushBuffer).String()
+	return test_logger.w.(*flushBuffer).String()
 }
 
 // contains reports whether the string is contained in the log.
 func contains(str string, t *testing.T) bool {
-	return strings.Contains(Logger.w.(*flushBuffer).String(), str)
+	return strings.Contains(test_logger.w.(*flushBuffer).String(), str)
 }
 
 // Test that Info works as advertised.
 func TestInfo(t *testing.T) {
-	Logger.w = &flushBuffer{}
-	Logger.Info("test")
+	test_logger.w = &flushBuffer{}
+	test_logger.Info("test")
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
 	}
@@ -57,13 +59,13 @@ func TestInfo(t *testing.T) {
 
 // Test that the header has the correct format.
 func TestHeader(t *testing.T) {
-	Logger.w = &flushBuffer{}
+	test_logger.w = &flushBuffer{}
 	defer func(previous func() time.Time) { timeNow = previous }(timeNow)
 	timeNow = func() time.Time {
 		return time.Date(2006, 1, 2, 15, 4, 5, .067890e9, time.Local)
 	}
 	pid = 1234
-	Logger.Info("test")
+	test_logger.Info("test")
 	var line int
 	format := "I0102 15:04:05.067890    1234 logger_test.go:%d] test\n"
 	n, err := fmt.Sscanf(contents(), format, &line)
@@ -82,8 +84,8 @@ func TestHeader(t *testing.T) {
 // Even in the Info log, the source character will be E, so the data should
 // all be identical.
 func TestError(t *testing.T) {
-	Logger.w = &flushBuffer{}
-	Logger.Error("test")
+	test_logger.w = &flushBuffer{}
+	test_logger.Error("test")
 	if !contains("E", t) {
 		t.Errorf("Error has wrong character: %q", contents())
 	}
@@ -103,8 +105,8 @@ func TestError(t *testing.T) {
 // Even in the Info log, the source character will be W, so the data should
 // all be identical.
 func TestWarning(t *testing.T) {
-	Logger.w = &flushBuffer{}
-	Logger.Warning("test")
+	test_logger.w = &flushBuffer{}
+	test_logger.Warning("test")
 	if !contains("W", t) {
 		t.Errorf("Warning has wrong character: %q", contents())
 	}
@@ -119,7 +121,7 @@ func TestWarning(t *testing.T) {
 
 func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		buf, _, _ := Logger.header(infoLog, 0)
-		Logger.putBuffer(buf)
+		buf, _, _ := test_logger.header(infoLog, 0)
+		test_logger.putBuffer(buf)
 	}
 }
