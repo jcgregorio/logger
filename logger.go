@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jcgregorio/slog"
 )
 
 var (
@@ -299,8 +301,10 @@ func (l *LoggerT) Fatalf(format string, args ...interface{}) {
 }
 
 func (l *LoggerT) Raw(s string) {
-	os.Stdout.Write([]byte(s))
+	l.w.Write([]byte(s))
 	if s[len(s)-1] != '\n' {
-		os.Stdout.Write([]byte{'\n'})
+		l.w.Write([]byte{'\n'})
 	}
 }
+
+var _ slog.Logger = (*LoggerT)(nil)
