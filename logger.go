@@ -18,6 +18,11 @@ var (
 	pid = os.Getpid()
 )
 
+type SyncWriter interface {
+	Write(p []byte) (n int, err error)
+	Sync() error
+}
+
 // severity identifies the sort of log: info, warning etc.
 type severity int32
 
@@ -43,6 +48,8 @@ var severityName = []string{
 
 // LoggerT collects all the global state of the logging setup.
 type LoggerT struct {
+	w SyncWriter
+
 	// freeList is a list of byte buffers, maintained under freeListMu.
 	freeList *buffer
 	// freeListMu maintains the free list. It is separate from the main mutex
@@ -58,7 +65,9 @@ type buffer struct {
 	next *buffer
 }
 
-var Logger LoggerT
+var (
+	Logger = LoggerT{w: os.Stdout}
+)
 
 // getBuffer returns a new, ready-to-use buffer.
 func (l *LoggerT) getBuffer() *buffer {
@@ -228,12 +237,12 @@ func (l *LoggerT) printf(s severity, format string, args ...interface{}) {
 // output writes the data to the log files and releases the buffer.
 func (l *LoggerT) output(s severity, buf *buffer, file string, line int) {
 	data := buf.Bytes()
-	os.Stdout.Write(data)
+	l.w.Write(data)
 	if s == fatalLog {
 		// Write the stack trace for all goroutines to the files.
 		trace := stacks(true)
-		os.Stdout.Write(trace)
-		os.Stdout.Sync()
+		l.w.Write(trace)
+		l.w.Sync()
 		os.Exit(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
 	}
 }
