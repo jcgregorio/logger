@@ -25,6 +25,9 @@ import (
 )
 
 var test_logger = New()
+var test_debug_logger = NewFromOptions(&Options{
+	IncludeDebug: true,
+})
 
 // flushBuffer wraps a bytes.Buffer to satisfy SyncWriter.
 type flushBuffer struct {
@@ -45,15 +48,37 @@ func contains(str string, t *testing.T) bool {
 	return strings.Contains(test_logger.w.(*flushBuffer).String(), str)
 }
 
-// Test that Debug works as advertised.
+// debug_contents returns the specified log value as a string.
+func debug_contents() string {
+	return test_debug_logger.w.(*flushBuffer).String()
+}
+
+// debug_contains reports whether the string is contained in the log.
+func debug_contains(str string, t *testing.T) bool {
+	return strings.Contains(test_debug_logger.w.(*flushBuffer).String(), str)
+}
+
+// Test that Debug does not emit by default.
 func TestDebug(t *testing.T) {
 	test_logger.w = &flushBuffer{}
 	test_logger.Debug("test")
-	if !contains("D", t) {
-		t.Errorf("Debug has wrong character: %q", contents())
+	if contents() != "" {
+		t.Errorf("Debug should not be emitted by default: %q", contents())
 	}
-	if !contains("test", t) {
-		t.Error("Debug failed")
+}
+
+// Test that Debug works if turned on.
+func TestDebugOn(t *testing.T) {
+	test_debug_logger = NewFromOptions(&Options{
+		SyncWriter:   &flushBuffer{},
+		IncludeDebug: true,
+	})
+	test_debug_logger.Debug("test")
+	if !debug_contains("D", t) {
+		t.Errorf("Info has wrong character: %q", debug_contents())
+	}
+	if !debug_contains("test", t) {
+		t.Error("Info failed")
 	}
 }
 

@@ -50,12 +50,39 @@ func New() *Logger {
 	return &Logger{w: os.Stdout}
 }
 
+// Options is passed to NewFromOptions to control some aspects of the created
+// Logger.
+type Options struct {
+	// SyncWriter is the destination to write logs to. If left nil then os.Stdout
+	// will be used.
+	SyncWriter SyncWriter
+
+	// IncludeDebug is true will emit Debug/Debugf logs, otherwise those logs are ignored.
+	IncludeDebug bool
+}
+
+func NewFromOptions(o *Options) *Logger {
+	var w SyncWriter = os.Stdout
+	if o.SyncWriter != nil {
+		w = o.SyncWriter
+	}
+	return &Logger{
+		w:            w,
+		includeDebug: o.IncludeDebug,
+	}
+}
+
 // Logger collects all the global state of the logging setup.
+//
+// *Logger implements the slog.Logger interface.
 type Logger struct {
 	w SyncWriter
 
+	includeDebug bool
+
 	// freeList is a list of byte buffers, maintained under freeListMu.
 	freeList *buffer
+
 	// freeListMu maintains the free list. It is separate from the main mutex
 	// so buffers can be grabbed and printed to without holding the main lock,
 	// for better parallelization.
@@ -267,11 +294,15 @@ func stacks(all bool) []byte {
 }
 
 func (l *Logger) Debug(args ...interface{}) {
-	l.print(debugLog, args...)
+	if l.includeDebug {
+		l.print(debugLog, args...)
+	}
 }
 
 func (l *Logger) Debugf(format string, args ...interface{}) {
-	l.printf(debugLog, format, args...)
+	if l.includeDebug {
+		l.printf(debugLog, format, args...)
+	}
 }
 
 func (l *Logger) Info(args ...interface{}) {
