@@ -45,6 +45,18 @@ func contains(str string, t *testing.T) bool {
 	return strings.Contains(test_logger.w.(*flushBuffer).String(), str)
 }
 
+// Test that Debug works as advertised.
+func TestDebug(t *testing.T) {
+	test_logger.w = &flushBuffer{}
+	test_logger.Debug("test")
+	if !contains("D", t) {
+		t.Errorf("Debug has wrong character: %q", contents())
+	}
+	if !contains("test", t) {
+		t.Error("Debug failed")
+	}
+}
+
 // Test that Info works as advertised.
 func TestInfo(t *testing.T) {
 	test_logger.w = &flushBuffer{}

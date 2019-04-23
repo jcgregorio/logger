@@ -1,6 +1,4 @@
-// Major parts of this implementation are copied verbatim from https://github.com/golang/glog, which is:
-//
-// Copyright 2013 Google Inc. All Rights Reserved.
+// Major parts of this implementation are copied verbatim from https://github.com/golang/glog.
 //
 package logger
 
@@ -29,19 +27,19 @@ type SyncWriter interface {
 type severity int32
 
 // These constants identify the log levels in order of increasing severity.
-// A message written to a high-severity log file is also written to each
-// lower-severity log file.
 const (
-	infoLog severity = iota
+	debugLog severity = iota
+	infoLog
 	warningLog
 	errorLog
 	fatalLog
 	numSeverity = 4
 )
 
-const severityChar = "IWEF"
+const severityChar = "DIWEF"
 
 var severityName = []string{
+	debugLog:   "DEBUG",
 	infoLog:    "INFO",
 	warningLog: "WARNING",
 	errorLog:   "ERROR",
@@ -268,6 +266,14 @@ func stacks(all bool) []byte {
 	return trace
 }
 
+func (l *Logger) Debug(args ...interface{}) {
+	l.print(debugLog, args...)
+}
+
+func (l *Logger) Debugf(format string, args ...interface{}) {
+	l.printf(debugLog, format, args...)
+}
+
 func (l *Logger) Info(args ...interface{}) {
 	l.print(infoLog, args...)
 }
@@ -313,4 +319,5 @@ func (l *Logger) SetOutput(w SyncWriter) {
 	l.w = w
 }
 
+// Assert that we implement the slog.Logger interface:
 var _ slog.Logger = (*Logger)(nil)
