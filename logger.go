@@ -344,11 +344,5 @@ func (l *Logger) Raw(s string) {
 	}
 }
 
-// SetOutput changes where the logs are written to. By default
-// the value is os.Stdout.
-func (l *Logger) SetOutput(w SyncWriter) {
-	l.w = w
-}
-
 // Assert that we implement the slog.Logger interface:
 var _ slog.Logger = (*Logger)(nil)
