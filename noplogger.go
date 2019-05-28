@@ -6,6 +6,11 @@ import "github.com/jcgregorio/slog"
 //
 type NopLogger struct{}
 
+// NewNopLogger returns an initialized *NopLogger.
+func NewNopLogger() *NopLogger {
+	return &NopLogger{}
+}
+
 // Fatal logs a fatal log and then exits the program.
 // Arguments are handled in the manner of fmt.Print.
 func (n *NopLogger) Fatal(args ...interface{}) {}
