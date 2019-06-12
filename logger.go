@@ -74,6 +74,7 @@ func NewFromOptions(o *Options) *Logger {
 	return &Logger{
 		w:            w,
 		includeDebug: o.IncludeDebug,
+		depthDelta:   o.DepthDelta,
 	}
 }
 
