@@ -59,6 +59,11 @@ type Options struct {
 
 	// IncludeDebug is true will emit Debug/Debugf logs, otherwise those logs are ignored.
 	IncludeDebug bool
+
+	// DepthDelta is the number of extra stack levels to look up when reporting the calling function.
+	//
+	// Useful if Logger is going to be wrapped inside another logging module.
+	DepthDelta int
 }
 
 func NewFromOptions(o *Options) *Logger {
@@ -87,6 +92,9 @@ type Logger struct {
 	// so buffers can be grabbed and printed to without holding the main lock,
 	// for better parallelization.
 	freeListMu sync.Mutex
+
+	// DepthDelta is the number of extra stack levels to look up when reporting the calling function.
+	depthDelta int
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -145,7 +153,7 @@ where the fields are defined as follows:
 	msg              The user-supplied message
 */
 func (l *Logger) header(s severity, depth int) (*buffer, string, int) {
-	_, file, line, ok := runtime.Caller(3 + depth)
+	_, file, line, ok := runtime.Caller(3 + depth + l.depthDelta)
 	if !ok {
 		file = "???"
 		line = 1

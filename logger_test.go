@@ -117,6 +117,35 @@ func TestHeader(t *testing.T) {
 	}
 }
 
+func logFromADepth() {
+	test_logger.Info("test")
+}
+
+// Test that the header respects DepthDelta.
+func TestDepthDelta(t *testing.T) {
+	test_logger.w = &flushBuffer{}
+	defer func(previous func() time.Time) { timeNow = previous }(timeNow)
+	timeNow = func() time.Time {
+		return time.Date(2006, 1, 2, 15, 4, 5, .067890e9, time.Local)
+	}
+	pid = 1234
+	test_logger.depthDelta = 1 // Should report a line in testing.go which calls this func.
+	logFromADepth()
+	var line int
+	format := "I0102 15:04:05.067890    1234 logger_test.go:%d] test\n"
+	n, err := fmt.Sscanf(contents(), format, &line)
+	if n != 1 || err != nil {
+		t.Errorf("log format error: %d elements, error %s:\n%s", n, err, contents())
+	}
+	// Scanf treats multiple spaces as equivalent to a single space,
+	// so check for correct space-padding also.
+	want := fmt.Sprintf(format, line)
+	if contents() != want {
+		t.Errorf("log format error: got:\n\t%q\nwant:\t%q", contents(), want)
+	}
+	test_logger.depthDelta = 0
+}
+
 // Test that an Error log goes to Warning and Info.
 // Even in the Info log, the source character will be E, so the data should
 // all be identical.
