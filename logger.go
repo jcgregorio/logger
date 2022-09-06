@@ -16,6 +16,9 @@ import (
 
 var (
 	pid = os.Getpid()
+
+	// Capture os.Exit to be used for testing.
+	osExit = os.Exit
 )
 
 type SyncWriter interface {
@@ -132,6 +135,16 @@ func (l *Logger) putBuffer(b *buffer) {
 	b.next = l.freeList
 	l.freeList = b
 	l.freeListMu.Unlock()
+}
+
+func (l *Logger) bufferCacheLen() int {
+	ret := 0
+	b := l.freeList
+	for b != nil {
+		ret++
+		b = b.next
+	}
+	return ret
 }
 
 var timeNow = time.Now // Stubbed out for testing.
@@ -253,33 +266,64 @@ func (l *Logger) print(s severity, args ...interface{}) {
 }
 
 func (l *Logger) printDepth(s severity, depth int, args ...interface{}) {
-	buf, file, line := l.header(s, depth)
+	header, _, _ := l.header(s, depth)
+
+	buf := l.getBuffer()
+
 	fmt.Fprint(buf, args...)
-	if buf.Bytes()[buf.Len()-1] != '\n' {
-		buf.WriteByte('\n')
-	}
-	l.output(s, buf, file, line)
+	l.emitAsOneOrMoreLogLines(s, buf, header)
+	l.putBuffer(buf)
 }
 
 func (l *Logger) printf(s severity, format string, args ...interface{}) {
-	buf, file, line := l.header(s, 0)
+	header, _, _ := l.header(s, 0)
+	buf := l.getBuffer()
+
 	fmt.Fprintf(buf, format, args...)
-	if buf.Bytes()[buf.Len()-1] != '\n' {
-		buf.WriteByte('\n')
-	}
-	l.output(s, buf, file, line)
+
+	l.emitAsOneOrMoreLogLines(s, buf, header)
+	l.putBuffer(buf)
 }
 
-// output writes the data to the log files and releases the buffer.
-func (l *Logger) output(s severity, buf *buffer, file string, line int) {
-	data := buf.Bytes()
-	l.w.Write(data)
+func (l *Logger) emitAsOneOrMoreLogLines(s severity, buf, header *buffer) {
+	// At this point buf could contain multiple embedded \n's, so we need to slice it up
+	// into multiple lines and emit each line separately.
+	l.emitAsOneOrMoreLogLinesImpl(buf, header)
+
 	if s == fatalLog {
-		// Write the stack trace for all goroutines to the files.
+		// If this is fatal then grab a strack trace and emit and also fatal
+		// error log entries.
 		trace := stacks(true)
-		l.w.Write(trace)
+
+		buf := l.getBuffer()
+		buf.Write(trace)
+		l.emitAsOneOrMoreLogLinesImpl(buf, header)
+
 		l.w.Sync()
-		os.Exit(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
+		osExit(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
+	}
+}
+
+func (l *Logger) emitAsOneOrMoreLogLinesImpl(buf, header *buffer) {
+	// At this point buf could contain multiple embedded \n's, so we need to slice it up
+	// into multiple lines and emit each line separately.
+	lines := bytes.Split(buf.Bytes(), []byte("\n"))
+	for _, pline := range lines {
+		// Don't emit blank lines.
+		if len(pline) == 0 {
+			continue
+		}
+
+		// Writes need to happen as a single call, so concatenate all the data
+		// we want to write as a single line and the write that buffer out.
+		buf := l.getBuffer()
+		buf.Write(header.Bytes())
+		buf.Write(pline)
+		buf.Write([]byte("\n"))
+
+		l.w.Write(buf.Bytes())
+
+		l.putBuffer(buf)
 	}
 }
 

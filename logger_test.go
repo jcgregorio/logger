@@ -24,8 +24,8 @@ import (
 	"time"
 )
 
-var test_logger = New()
-var test_debug_logger = NewFromOptions(&Options{
+var testLogger = New()
+var testDebugLogger = NewFromOptions(&Options{
 	IncludeDebug: true,
 })
 
@@ -40,28 +40,33 @@ func (f *flushBuffer) Sync() error {
 
 // contents returns the specified log value as a string.
 func contents() string {
-	return test_logger.w.(*flushBuffer).String()
+	return testLogger.w.(*flushBuffer).String()
 }
 
 // contains reports whether the string is contained in the log.
 func contains(str string, t *testing.T) bool {
-	return strings.Contains(test_logger.w.(*flushBuffer).String(), str)
+	return strings.Contains(testLogger.w.(*flushBuffer).String(), str)
 }
 
-// debug_contents returns the specified log value as a string.
-func debug_contents() string {
-	return test_debug_logger.w.(*flushBuffer).String()
+// debugContents returns the specified log value as a string.
+func debugContents() string {
+	return testDebugLogger.w.(*flushBuffer).String()
 }
 
-// debug_contains reports whether the string is contained in the log.
-func debug_contains(str string, t *testing.T) bool {
-	return strings.Contains(test_debug_logger.w.(*flushBuffer).String(), str)
+// debugContains reports whether the string is contained in the log.
+func debugContains(str string, t *testing.T) bool {
+	return strings.Contains(testDebugLogger.w.(*flushBuffer).String(), str)
+}
+
+func newTestLogger() {
+	testLogger = New()
+	testLogger.w = &flushBuffer{}
 }
 
 // Test that Debug does not emit by default.
 func TestDebug(t *testing.T) {
-	test_logger.w = &flushBuffer{}
-	test_logger.Debug("test")
+	newTestLogger()
+	testLogger.Debug("test")
 	if contents() != "" {
 		t.Errorf("Debug should not be emitted by default: %q", contents())
 	}
@@ -69,23 +74,23 @@ func TestDebug(t *testing.T) {
 
 // Test that Debug works if turned on.
 func TestDebugOn(t *testing.T) {
-	test_debug_logger = NewFromOptions(&Options{
+	testDebugLogger = NewFromOptions(&Options{
 		SyncWriter:   &flushBuffer{},
 		IncludeDebug: true,
 	})
-	test_debug_logger.Debug("test")
-	if !debug_contains("D", t) {
-		t.Errorf("Info has wrong character: %q", debug_contents())
+	testDebugLogger.Debug("test")
+	if !debugContains("D", t) {
+		t.Errorf("Info has wrong character: %q", debugContents())
 	}
-	if !debug_contains("test", t) {
+	if !debugContains("test", t) {
 		t.Error("Info failed")
 	}
 }
 
 // Test that Info works as advertised.
 func TestInfo(t *testing.T) {
-	test_logger.w = &flushBuffer{}
-	test_logger.Info("test")
+	newTestLogger()
+	testLogger.Info("test")
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
 	}
@@ -94,15 +99,78 @@ func TestInfo(t *testing.T) {
 	}
 }
 
+func TestInfof(t *testing.T) {
+	newTestLogger()
+	testLogger.Infof("test-%d", 100)
+	if !contains("I", t) {
+		t.Errorf("Info has wrong character: %q", contents())
+	}
+	if !contains("test-100", t) {
+		t.Error("Info failed")
+	}
+}
+
+func TestRaw(t *testing.T) {
+	newTestLogger()
+	testLogger.Raw("test")
+	if contents() != "test\n" {
+		t.Error("Raw failed")
+	}
+}
+
+func TestMultiLineInfo(t *testing.T) {
+	newTestLogger()
+
+	testLogger.Info("foo\nbar")
+	if !contains("I", t) {
+		t.Errorf("Info has wrong character: %q", contents())
+	}
+
+	lines := strings.Split(contents(), "\n")
+	if len(lines) != 3 {
+		t.Errorf("Wrong number of lines, got: %d want: 3", len(lines))
+	}
+	if len(lines[2]) != 0 {
+		t.Error("Expected last line to be empty.")
+	}
+
+	if !strings.Contains(lines[0], "] foo") {
+		t.Error("Failed to format first line 'foo'.")
+	}
+	if !strings.Contains(lines[1], "] bar") {
+		t.Error("Failed to format second line 'bar'.")
+	}
+	if blen := testLogger.bufferCacheLen(); blen != 2 {
+		t.Errorf("Wrong buffer length, got %d want 2", blen)
+	}
+}
+
+func TestFatal(t *testing.T) {
+	newTestLogger()
+
+	exitCalled := false
+	osExit = func(code int) {
+		exitCalled = true
+	}
+	testLogger.Fatal("foo")
+	if !exitCalled {
+		t.Error("Failed to call os.Exit on Fatal error.")
+	}
+	lines := strings.Split(contents(), "\n")
+	if len(lines) < 10 {
+		t.Errorf("Wrong number of lines, got: %d want: > 10", len(lines))
+	}
+}
+
 // Test that the header has the correct format.
 func TestHeader(t *testing.T) {
-	test_logger.w = &flushBuffer{}
+	testLogger.w = &flushBuffer{}
 	defer func(previous func() time.Time) { timeNow = previous }(timeNow)
 	timeNow = func() time.Time {
 		return time.Date(2006, 1, 2, 15, 4, 5, .067890e9, time.Local)
 	}
 	pid = 1234
-	test_logger.Info("test")
+	testLogger.Info("test")
 	var line int
 	format := "I0102 15:04:05.067890    1234 logger_test.go:%d] test\n"
 	n, err := fmt.Sscanf(contents(), format, &line)
@@ -118,18 +186,18 @@ func TestHeader(t *testing.T) {
 }
 
 func logFromADepth() {
-	test_logger.Info("test")
+	testLogger.Info("test")
 }
 
 // Test that the header respects DepthDelta.
 func TestDepthDelta(t *testing.T) {
-	test_logger.w = &flushBuffer{}
+	testLogger.w = &flushBuffer{}
 	defer func(previous func() time.Time) { timeNow = previous }(timeNow)
 	timeNow = func() time.Time {
 		return time.Date(2006, 1, 2, 15, 4, 5, .067890e9, time.Local)
 	}
 	pid = 1234
-	test_logger.depthDelta = 1 // Should report a line in testing.go which calls this func.
+	testLogger.depthDelta = 1 // Should report a line in testing.go which calls this func.
 	logFromADepth()
 	var line int
 	format := "I0102 15:04:05.067890    1234 logger_test.go:%d] test\n"
@@ -143,15 +211,15 @@ func TestDepthDelta(t *testing.T) {
 	if contents() != want {
 		t.Errorf("log format error: got:\n\t%q\nwant:\t%q", contents(), want)
 	}
-	test_logger.depthDelta = 0
+	testLogger.depthDelta = 0
 }
 
 // Test that an Error log goes to Warning and Info.
 // Even in the Info log, the source character will be E, so the data should
 // all be identical.
 func TestError(t *testing.T) {
-	test_logger.w = &flushBuffer{}
-	test_logger.Error("test")
+	testLogger.w = &flushBuffer{}
+	testLogger.Error("test")
 	if !contains("E", t) {
 		t.Errorf("Error has wrong character: %q", contents())
 	}
@@ -171,8 +239,8 @@ func TestError(t *testing.T) {
 // Even in the Info log, the source character will be W, so the data should
 // all be identical.
 func TestWarning(t *testing.T) {
-	test_logger.w = &flushBuffer{}
-	test_logger.Warning("test")
+	testLogger.w = &flushBuffer{}
+	testLogger.Warning("test")
 	if !contains("W", t) {
 		t.Errorf("Warning has wrong character: %q", contents())
 	}
@@ -187,7 +255,7 @@ func TestWarning(t *testing.T) {
 
 func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		buf, _, _ := test_logger.header(infoLog, 0)
-		test_logger.putBuffer(buf)
+		buf, _, _ := testLogger.header(infoLog, 0)
+		testLogger.putBuffer(buf)
 	}
 }
